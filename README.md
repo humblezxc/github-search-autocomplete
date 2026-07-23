@@ -5,6 +5,8 @@ input, one combined list of matching **users and repositories**, ordered
 alphabetically. React 19 + TypeScript (strict), and no runtime dependencies
 beyond React itself — no autocomplete, data-fetching, or utility libraries.
 
+**Live demo:** https://humblezxc.github.io/github-search-autocomplete/
+
 ## Quick start
 
 ```bash
