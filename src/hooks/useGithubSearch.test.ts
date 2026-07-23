@@ -1,43 +1,13 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
-import type {
-  GithubRepoItem,
-  GithubSearchResponse,
-  GithubUserItem,
-} from '../api/types';
 import { DEBOUNCE_MS } from '../config';
+import { reposResponse, usersResponse } from '../test/builders';
 import { server } from '../test/server';
 import { useDebouncedValue } from './useDebouncedValue';
 import { useGithubSearch } from './useGithubSearch';
 
 const USERS_URL = 'https://api.github.com/search/users';
 const REPOS_URL = 'https://api.github.com/search/repositories';
-
-function usersResponse(logins: string[]): GithubSearchResponse<GithubUserItem> {
-  return {
-    total_count: logins.length,
-    incomplete_results: false,
-    items: logins.map((login, index) => ({
-      id: index + 1,
-      login,
-      html_url: `https://github.com/${login}`,
-      avatar_url: '',
-    })),
-  };
-}
-
-function reposResponse(names: string[]): GithubSearchResponse<GithubRepoItem> {
-  return {
-    total_count: names.length,
-    incomplete_results: false,
-    items: names.map((name, index) => ({
-      id: index + 1,
-      name,
-      html_url: `https://github.com/owner/${name}`,
-      owner: { login: 'owner', avatar_url: '' },
-    })),
-  };
-}
 
 describe('useGithubSearch', () => {
   afterEach(() => {
