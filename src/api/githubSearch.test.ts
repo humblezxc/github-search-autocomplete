@@ -204,3 +204,34 @@ describe('searchAll', () => {
     });
   });
 });
+
+describe('authentication', () => {
+  it('sends no authorization header without a token', async () => {
+    const requests: Request[] = [];
+    server.use(
+      http.get(USERS_URL, ({ request }) => {
+        requests.push(request);
+        return HttpResponse.json(userSearchResponse);
+      }),
+    );
+
+    await searchUsers('octocat');
+
+    expect(requests[0]?.headers.get('authorization')).toBeNull();
+  });
+
+  it('sends the bearer token when one is configured', async () => {
+    vi.stubEnv('VITE_GITHUB_TOKEN', 'test-token');
+    const requests: Request[] = [];
+    server.use(
+      http.get(USERS_URL, ({ request }) => {
+        requests.push(request);
+        return HttpResponse.json(userSearchResponse);
+      }),
+    );
+
+    await searchUsers('octocat');
+
+    expect(requests[0]?.headers.get('authorization')).toBe('Bearer test-token');
+  });
+});

@@ -9,10 +9,17 @@ import type {
 
 const API_BASE = 'https://api.github.com';
 
-const HEADERS = {
-  Accept: 'application/vnd.github+json',
-  'X-GitHub-Api-Version': '2022-11-28',
-};
+function buildHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  const token = import.meta.env.VITE_GITHUB_TOKEN;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+}
 
 export class GithubSearchError extends Error {
   readonly info: SearchError;
@@ -54,7 +61,10 @@ async function fetchSearch<TItem>(
 ): Promise<TItem[]> {
   let response: Response;
   try {
-    response = await fetch(buildUrl(path, q), { headers: HEADERS, signal });
+    response = await fetch(buildUrl(path, q), {
+      headers: buildHeaders(),
+      signal,
+    });
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;
