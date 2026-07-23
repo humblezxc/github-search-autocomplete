@@ -145,6 +145,52 @@ describe('GithubAutocomplete states', () => {
   });
 });
 
+describe('GithubAutocomplete rate limiting', () => {
+  it('shows the seconds until the rate limit resets', async () => {
+    server.use(
+      http.get(USERS_URL, () => {
+        const reset = Math.floor((Date.now() + 42_000) / 1000);
+        return new HttpResponse(null, {
+          status: 429,
+          headers: {
+            'x-ratelimit-remaining': '0',
+            'x-ratelimit-reset': String(reset),
+          },
+        });
+      }),
+      http.get(REPOS_URL, () => HttpResponse.json(reposResponse([]))),
+    );
+    const user = setup();
+
+    await user.type(screen.getByRole('combobox'), 'react');
+
+    const message = await screen.findByText(/rate limit/i);
+    const seconds = /about (\d+)s/i.exec(message.textContent ?? '')?.[1];
+    expect(Number(seconds)).toBeGreaterThanOrEqual(30);
+    expect(Number(seconds)).toBeLessThanOrEqual(42);
+  });
+
+  it('shows a fallback when the reset time is unknown', async () => {
+    server.use(
+      http.get(
+        USERS_URL,
+        () =>
+          new HttpResponse(null, {
+            status: 403,
+            headers: { 'x-ratelimit-remaining': '0' },
+          }),
+      ),
+      http.get(REPOS_URL, () => HttpResponse.json(reposResponse([]))),
+    );
+    const user = setup();
+
+    await user.type(screen.getByRole('combobox'), 'react');
+
+    const message = await screen.findByText(/rate limit/i);
+    expect(message.textContent).toMatch(/try again shortly/i);
+  });
+});
+
 function mockResults(users: string[], repos: string[]) {
   server.use(
     http.get(USERS_URL, () => HttpResponse.json(usersResponse(users))),

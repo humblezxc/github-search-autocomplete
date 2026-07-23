@@ -4,8 +4,16 @@ import styles from './GithubAutocomplete.module.css';
 
 function errorText(error: SearchError): string {
   switch (error.kind) {
-    case 'rate-limit':
-      return 'GitHub search rate limit reached. Wait a moment before typing again.';
+    case 'rate-limit': {
+      if (error.resetAt === null) {
+        return 'GitHub search rate limit reached. Try again shortly.';
+      }
+      const seconds = Math.max(
+        0,
+        Math.ceil((error.resetAt.getTime() - Date.now()) / 1000),
+      );
+      return `GitHub search rate limit reached. Try again in about ${seconds}s.`;
+    }
     case 'http':
       return `GitHub responded with an error (status ${error.status}). Try again.`;
     case 'network':
