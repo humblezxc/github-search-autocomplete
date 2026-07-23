@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent, { type UserEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { DEBOUNCE_MS } from '../../config';
@@ -142,5 +142,150 @@ describe('GithubAutocomplete states', () => {
     expect(
       await screen.findByText(/could not reach github/i),
     ).toBeInTheDocument();
+  });
+});
+
+function mockResults(users: string[], repos: string[]) {
+  server.use(
+    http.get(USERS_URL, () => HttpResponse.json(usersResponse(users))),
+    http.get(REPOS_URL, () => HttpResponse.json(reposResponse(repos))),
+  );
+}
+
+describe('GithubAutocomplete keyboard and selection', () => {
+  it('moves the highlight with ArrowDown and clamps at the last option', async () => {
+    mockResults(['bravo'], ['alpha']);
+    const user = setup();
+    const input = screen.getByRole('combobox');
+
+    await user.type(input, 'test');
+    await screen.findAllByRole('option');
+
+    await user.keyboard('{ArrowDown}');
+    let options = screen.getAllByRole('option');
+    expect(options[0]).toHaveAttribute('aria-selected', 'true');
+    expect(input).toHaveAttribute('aria-activedescendant', options[0]!.id);
+
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
+    options = screen.getAllByRole('option');
+    expect(options[1]).toHaveAttribute('aria-selected', 'true');
+    expect(options[0]).toHaveAttribute('aria-selected', 'false');
+    expect(input).toHaveAttribute('aria-activedescendant', options[1]!.id);
+  });
+
+  it('moves the highlight with ArrowUp and clamps at the first option', async () => {
+    mockResults(['bravo'], ['alpha']);
+    const user = setup();
+    const input = screen.getByRole('combobox');
+
+    await user.type(input, 'test');
+    await screen.findAllByRole('option');
+
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowUp}{ArrowUp}');
+
+    const options = screen.getAllByRole('option');
+    expect(options[0]).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('opens the highlighted item in a new tab on Enter and closes the list', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    mockResults([], ['alpha']);
+    const user = setup();
+    const input = screen.getByRole('combobox');
+
+    await user.type(input, 'test');
+    await screen.findAllByRole('option');
+
+    await user.keyboard('{ArrowDown}{Enter}');
+
+    expect(openSpy).toHaveBeenCalledExactlyOnceWith(
+      'https://github.com/owner/alpha',
+      '_blank',
+      'noopener,noreferrer',
+    );
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('does nothing on Enter when no option is highlighted', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    mockResults(['bravo'], ['alpha']);
+    const user = setup();
+    const input = screen.getByRole('combobox');
+
+    await user.type(input, 'test');
+    await screen.findAllByRole('option');
+
+    await user.keyboard('{Enter}');
+
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('closes on Escape and reopens on ArrowDown', async () => {
+    mockResults(['bravo'], ['alpha']);
+    const user = setup();
+    const input = screen.getByRole('combobox');
+
+    await user.type(input, 'test');
+    await screen.findAllByRole('option');
+
+    await user.keyboard('{Escape}');
+
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+
+    await user.keyboard('{ArrowDown}');
+
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getAllByRole('option')).toHaveLength(2);
+  });
+
+  it('opens an option in a new tab on click without losing input focus', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    mockResults(['bravo'], []);
+    const user = setup();
+    const input = screen.getByRole('combobox');
+
+    await user.type(input, 'test');
+    const options = await screen.findAllByRole('option');
+
+    await user.click(options[0]!);
+
+    expect(openSpy).toHaveBeenCalledExactlyOnceWith(
+      'https://github.com/bravo',
+      '_blank',
+      'noopener,noreferrer',
+    );
+    expect(input).toHaveFocus();
+  });
+
+  it('clears the highlight when the results change', async () => {
+    server.use(
+      http.get(USERS_URL, ({ request }) => {
+        const q = new URL(request.url).searchParams.get('q') ?? '';
+        return HttpResponse.json(
+          usersResponse(q.startsWith('aaa ') ? ['first', 'second'] : []),
+        );
+      }),
+      http.get(REPOS_URL, ({ request }) => {
+        const q = new URL(request.url).searchParams.get('q') ?? '';
+        return HttpResponse.json(
+          reposResponse(q.startsWith('aaa ') ? [] : ['other']),
+        );
+      }),
+    );
+    const user = setup();
+    const input = screen.getByRole('combobox');
+
+    await user.type(input, 'aaa');
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(2));
+    await user.keyboard('{ArrowDown}');
+    expect(input).toHaveAttribute('aria-activedescendant');
+
+    await user.type(input, 'b');
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(1));
+
+    expect(input).not.toHaveAttribute('aria-activedescendant');
   });
 });
